@@ -1,0 +1,12 @@
+# Temp VFX Project - Nuke Script
+# Created: [DATE]
+# Project: Temp
+# Type: VFX Compositing
+
+# Nuke compositing script
+# Includes:
+# - Read nodes for plates
+# - Tracking and matchmove
+# - CG integration
+# - Color grading
+# - Write nodes for renders

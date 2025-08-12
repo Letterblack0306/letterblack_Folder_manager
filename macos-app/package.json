@@ -1,0 +1,100 @@
+{
+  "name": "quick-folder-launcher-macos",
+  "version": "2.0.0",
+  "description": "Quick Folder Launcher for macOS - Professional project folder management with templates",
+  "main": "main.js",
+  "homepage": "https://github.com/your-username/quick-folder-launcher",
+  "author": {
+    "name": "Quick Folder Launcher Team",
+    "email": "support@quickfolderlauncher.com"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder build --mac",
+    "dist": "electron-builder build --mac --publish=never",
+    "pack": "electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps",
+    "clean": "rimraf dist build",
+    "rebuild": "npm run clean && npm install && npm run build"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "rimraf": "^5.0.5"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.4"
+  },
+  "build": {
+    "appId": "com.quickfolderlauncher.macos",
+    "productName": "Quick Folder Launcher",
+    "copyright": "Copyright © 2024 Quick Folder Launcher Team",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "**/*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.nyc_output,__tests__,__test__,test,tests,powered-test,example,examples,*.md}"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "default",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "LSUIElement": false,
+        "NSAppleEventsUsageDescription": "This app needs access to control other applications for launching them.",
+        "NSDocumentsFolderUsageDescription": "This app needs access to your Documents folder to create and manage project folders."
+      }
+    },
+    "dmg": {
+      "title": "Quick Folder Launcher ${version}",
+      "icon": "build/icon.icns",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 180,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "background": "build/dmg-background.png"
+    }
+  },
+  "keywords": [
+    "folder",
+    "launcher",
+    "productivity",
+    "macos",
+    "file-manager",
+    "project-management",
+    "creative-workflow",
+    "vfx",
+    "3d",
+    "development"
+  ]
+}

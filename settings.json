@@ -1,0 +1,88 @@
+{
+  "template": {
+    "name": "default",
+    "path": "templates/default",
+    "customPath": "",
+    "placeholderName": "Temp",
+    "useCustomPath": false
+  },
+  "availableTemplates": {
+    "default": {
+      "name": "Default Template",
+      "path": "templates/default",
+      "description": "Basic project structure with AEP and Premiere Pro folders",
+      "profession": "General"
+    },
+    "vfx-artist": {
+      "name": "VFX Artist",
+      "path": "templates/vfx-artist",
+      "description": "VFX workflow with After Effects, Nuke, plates, and elements",
+      "profession": "VFX"
+    },
+    "3d-artist": {
+      "name": "3D Artist",
+      "path": "templates/3d-artist",
+      "description": "3D pipeline with Maya, Blender, textures, and renders",
+      "profession": "3D"
+    },
+    "developer": {
+      "name": "Developer",
+      "path": "templates/developer",
+      "description": "Software development with src, docs, tests, and build folders",
+      "profession": "Development"
+    },
+    "graphic-designer": {
+      "name": "Graphic Designer",
+      "path": "templates/graphic-designer",
+      "description": "Design workflow with Photoshop, Illustrator, and InDesign",
+      "profession": "Design"
+    },
+    "video-editor": {
+      "name": "Video Editor",
+      "path": "templates/video-editor",
+      "description": "Video editing with Premiere, DaVinci, footage, and exports",
+      "profession": "Video"
+    },
+    "photographer": {
+      "name": "Photographer",
+      "path": "templates/photographer",
+      "description": "Photography workflow with RAW files, Lightroom, and delivery",
+      "profession": "Photography"
+    }
+  },
+  "applications": {},
+  "folderStructure": {
+    "01. AEP": {
+      "enabled": true,
+      "description": "After Effects projects"
+    },
+    "02. prePro": {
+      "enabled": true,
+      "description": "Premiere Pro projects"
+    },
+    "03. Renders": {
+      "enabled": true,
+      "description": "Rendered output files"
+    },
+    "04. Planning": {
+      "enabled": true,
+      "description": "Project planning and references"
+    },
+    "05. Assets": {
+      "enabled": true,
+      "description": "Source materials and assets"
+    },
+    "06. Audio": {
+      "enabled": true,
+      "description": "Audio files and music"
+    },
+    "07. Graphics": {
+      "enabled": true,
+      "description": "Graphics and illustrations"
+    },
+    "08. Archive": {
+      "enabled": false,
+      "description": "Archived versions"
+    }
+  }
+}

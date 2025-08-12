@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Folder Launcher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="action-bar top-bar">
+            <button id="createFolderStructure" class="icon-btn">Create Project Structure</button>
+            <button id="settingsBtn" class="icon-btn">Settings</button>
+        </div>
+        <div class="input-bar">
+            <input type="text" id="folderPath" placeholder="Enter folder path...">
+            <button id="browseFolder" class="icon-btn">Browse</button>
+            <button id="addFolder" class="icon-btn">Add</button>
+        </div>
+        <div id="folderList" class="list"></div>
+    </div>
+    <script src="renderer.js"></script>
+    <footer class="app-credit">Created by LETTERBLACK</footer>
+</body>
+</html>

@@ -1,0 +1,155 @@
+name: Build Mobile Apps
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'ios-app/**' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'ios-app/**' ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ios-app/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ios-app
+      run: npm install
+      
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.0'
+        bundler-cache: true
+        working-directory: ios-app/ios
+        
+    - name: Install CocoaPods dependencies
+      working-directory: ios-app/ios
+      run: |
+        gem install cocoapods
+        pod install
+        
+    - name: Build iOS app
+      working-directory: ios-app
+      run: |
+        npx react-native bundle --platform ios --entry-file index.js --bundle-output ios/main.jsbundle
+        
+    - name: Archive iOS app
+      working-directory: ios-app/ios
+      run: |
+        xcodebuild -workspace QuickFolderLauncher.xcworkspace \
+          -scheme QuickFolderLauncher \
+          -configuration Release \
+          -archivePath QuickFolderLauncher.xcarchive \
+          archive
+          
+    - name: Export IPA
+      working-directory: ios-app/ios
+      run: |
+        xcodebuild -exportArchive \
+          -archivePath QuickFolderLauncher.xcarchive \
+          -exportPath . \
+          -exportOptionsPlist ExportOptions.plist
+          
+    - name: Upload iOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-mobile-app
+        path: ios-app/ios/*.ipa
+        retention-days: 30
+
+  build-android:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ios-app/package-lock.json
+        
+    - name: Setup JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Install dependencies
+      working-directory: ios-app
+      run: npm install
+      
+    - name: Build Android APK
+      working-directory: ios-app
+      run: |
+        npx react-native bundle --platform android --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+        cd android
+        ./gradlew assembleRelease
+        
+    - name: Build Android AAB
+      working-directory: ios-app/android
+      run: ./gradlew bundleRelease
+      
+    - name: Upload Android artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-mobile-app
+        path: |
+          ios-app/android/app/build/outputs/apk/release/*.apk
+          ios-app/android/app/build/outputs/bundle/release/*.aab
+        retention-days: 30
+        
+    - name: Upload to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ios-app/android/app/build/outputs/apk/release/*.apk
+          ios-app/android/app/build/outputs/bundle/release/*.aab
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-mobile:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: ios-app/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ios-app
+      run: npm install
+      
+    - name: Run tests
+      working-directory: ios-app
+      run: npm test
+      
+    - name: Run lint
+      working-directory: ios-app
+      run: npm run lint

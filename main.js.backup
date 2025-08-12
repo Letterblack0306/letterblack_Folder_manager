@@ -1,0 +1,628 @@
+/**
+ * Quick Folder Launcher - Main Process
+ * 
+ * An Electron application for quick access to project folders and launching
+ * After Effects (.aep) and Premiere Pro (.prproj) files.
+ * 
+ * Features:
+ * - Create standardized project folder structures
+ * - Save and manage frequently used project folders
+ * - Scan folders for project files with metadata
+ * - Launch project files with multiple fallback methods for Windows compatibility
+ * - Compact, always-on-top interface for quick access
+ * 
+ * @author GitHub Copilot Assistant
+ * @version 1.0.0
+ */
+
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
+const os = require('os');
+
+// Store for folder data persistence
+const dataPath = path.join(__dirname, 'folders.json');
+const settingsPath = path.join(__dirname, 'settings.json');
+
+// Platform detection
+const isWindows = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
+const isLinux = process.platform === 'linux';
+
+/**
+ * Create the main application window
+ * Configures window properties for compact, always-on-top behavior
+ */
+function createWindow() {
+  const mainWindow = new BrowserWindow({
+    width: 320,
+    height: 150,
+    resizable: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    },
+    titleBarStyle: 'default',
+    frame: true,
+    alwaysOnTop: true
+  });
+
+  mainWindow.loadFile('index.html');
+  
+  // Remove menu bar for cleaner look
+  mainWindow.setMenuBarVisibility(false);
+}
+
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+
+/**
+ * IPC handler to load saved folders and applications data
+ * Includes cleanup of invalid file paths and data structure validation
+ */
+ipcMain.handle('load-folders', () => {
+  try {
+    if (fs.existsSync(dataPath)) {
+      const data = fs.readFileSync(dataPath, 'utf8');
+      const parsedData = JSON.parse(data);
+      
+      // Clean up invalid file paths
+      if (parsedData.applications) {
+        for (const [key, filePath] of Object.entries(parsedData.applications)) {
+          if (!fs.existsSync(filePath)) {
+            console.log(`Removing invalid path for ${key}: ${filePath}`);
+            delete parsedData.applications[key];
+          }
+        }
+        
+        // Save cleaned data back
+        fs.writeFileSync(dataPath, JSON.stringify(parsedData, null, 2));
+      }
+      
+      return parsedData;
+    }
+    return { folders: [], applications: {} };
+  } catch (error) {
+    console.error('Error loading folders:', error);
+    return { folders: [], applications: {} };
+  }
+});
+
+/**
+ * IPC handler to save folders and applications data to persistent storage
+ * @param {Object} data - The data object containing folders and applications
+ */
+ipcMain.handle('save-folders', (event, data) => {
+  try {
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error saving folders:', error);
+    return false;
+  }
+});
+
+/**
+ * IPC handler to create standardized project folder structure using templates
+ * Creates project folder with custom structure and renames template files
+ * @param {string} projectName - Name of the project
+ * @param {string} targetPath - Path where the project should be created
+ * @returns {Object} Result object with success status and path or error
+ */
+/**
+ * IPC handler to recursively search for project files in specified folders
+ * Searches for .aep (After Effects) and .prproj (Premiere Pro) files
+ * Excludes auto-save files and limits search depth for performance
+ * @param {Array} folderPaths - Array of folder objects with name and path properties
+ * @returns {Array} Array of project objects with metadata (name, path, type, dates, etc.)
+ */
+ipcMain.handle('find-all-projects', async (event, folderPaths) => {
+  const allProjects = [];
+  
+  try {
+    console.log('Scanning folders for all projects:', folderPaths);
+    
+    // Function to recursively search for project files
+    function searchForProjectFiles(currentPath, baseFolderName, depth = 0) {
+      if (depth > 2) return; // Reduced search depth
+      
+      try {
+        const items = fs.readdirSync(currentPath);
+        
+        for (const item of items) {
+          const itemPath = path.join(currentPath, item);
+          const stat = fs.statSync(itemPath);
+          
+          if (stat.isFile()) {
+            const ext = path.extname(item).toLowerCase();
+            const fileName = path.basename(item, ext);
+            
+            // Skip files with "auto-save" in the name (case insensitive)
+            if (fileName.toLowerCase().includes('auto-save')) {
+              console.log('Skipping auto-save file:', item);
+              continue;
+            }
+            
+            if (ext === '.aep' || ext === '.prproj') {
+              const projectInfo = {
+                name: fileName,
+                path: itemPath,
+                type: ext === '.aep' ? 'After Effects' : 'Premiere Pro',
+                extension: ext,
+                folder: baseFolderName,
+                createdDate: stat.birthtime,
+                modifiedDate: stat.mtime,
+                size: stat.size
+              };
+              allProjects.push(projectInfo);
+              console.log(`Found ${projectInfo.type} project:`, projectInfo.name, 'in', baseFolderName);
+            }
+          } else if (stat.isDirectory()) {
+            const folderName = item.toLowerCase();
+            // Search in AEP, prePro folders and numbered equivalents (case insensitive)
+            if (depth === 0 || 
+                folderName === 'prepro' || folderName === 'aep' ||
+                folderName.includes('01.') || folderName.includes('02.') ||
+                folderName.includes('aep') || folderName.includes('prepro')) {
+              searchForProjectFiles(itemPath, baseFolderName, depth + 1);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error reading directory:', currentPath, error);
+      }
+    }
+    
+    // Search all provided folder paths
+    for (const folderData of folderPaths) {
+      if (fs.existsSync(folderData.path)) {
+        searchForProjectFiles(folderData.path, folderData.name);
+      }
+    }
+    
+    // Sort by creation date (newest first)
+    allProjects.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
+    
+    console.log(`Found ${allProjects.length} total projects`);
+    return allProjects;
+  } catch (error) {
+    console.error('Error finding project files:', error);
+    return [];
+  }
+});
+
+// Complex template functionality removed for simplification
+  try {
+    // Load settings to get template configuration
+    const settings = await loadSettings();
+    const finalProjectPath = path.join(targetPath, projectName);
+    
+    // Determine template path (custom or default)
+    let templatePath;
+    if (settings.template.useCustomPath && settings.template.customPath) {
+      templatePath = settings.template.customPath;
+    } else {
+      templatePath = path.join(__dirname, settings.template.path);
+    }
+    
+    // Check if template exists
+    if (!fs.existsSync(templatePath)) {
+      return { success: false, error: 'Template not found at: ' + templatePath };
+    }
+    
+    // Create the project directory
+    if (!fs.existsSync(finalProjectPath)) {
+      fs.mkdirSync(finalProjectPath, { recursive: true });
+    }
+    
+    // If using custom template, copy it; otherwise create from settings
+    if (settings.template.useCustomPath && settings.template.customPath) {
+      await copyTemplateWithRename(templatePath, finalProjectPath, settings.template.placeholderName, projectName);
+    } else {
+      // Create folders based on settings
+      await createFoldersFromSettings(finalProjectPath, settings, projectName);
+    }
+    
+    console.log(`Created project structure at: ${finalProjectPath}`);
+    return { success: true, path: finalProjectPath };
+  } catch (error) {
+    console.error('Error creating folder structure:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Create folders based on settings configuration
+ */
+async function createFoldersFromSettings(projectPath, settings, projectName) {
+  // Create folders from folderStructure settings
+  for (const [folderName, config] of Object.entries(settings.folderStructure)) {
+    if (config.enabled) {
+      const folderPath = path.join(projectPath, folderName);
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+      
+      // Create template files in specific folders
+      if (folderName.includes('AEP') || folderName.includes('01.')) {
+        const aepFile = path.join(folderPath, `${projectName}_main.aep`);
+        fs.writeFileSync(aepFile, `# ${projectName} After Effects Project\n# Created: ${new Date().toLocaleDateString()}`);
+      }
+      
+      if (folderName.includes('prePro') || folderName.includes('02.')) {
+        const prFile = path.join(folderPath, `${projectName}_edit.prproj`);
+        fs.writeFileSync(prFile, `# ${projectName} Premiere Pro Project\n# Created: ${new Date().toLocaleDateString()}`);
+      }
+    }
+  }
+}
+
+/**
+ * Load settings from settings.json
+ */
+async function loadSettings() {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf8');
+      return JSON.parse(data);
+    }
+    // Return default settings if file doesn't exist
+    return {
+      template: {
+        name: "default",
+        path: "templates/default",
+        customPath: "",
+        placeholderName: "Temp",
+        useCustomPath: false
+      },
+      availableTemplates: {
+        "default": {
+          "name": "Default Template",
+          "path": "templates/default",
+          "description": "Basic project structure with AEP and Premiere Pro folders",
+          "profession": "General"
+        },
+        "vfx-artist": {
+          "name": "VFX Artist",
+          "path": "templates/vfx-artist", 
+          "description": "VFX workflow with After Effects, Nuke, plates, and elements",
+          "profession": "VFX"
+        },
+        "3d-artist": {
+          "name": "3D Artist",
+          "path": "templates/3d-artist",
+          "description": "3D pipeline with Maya, Blender, textures, and renders",
+          "profession": "3D"
+        },
+        "developer": {
+          "name": "Developer",
+          "path": "templates/developer",
+          "description": "Software development with src, docs, tests, and build folders",
+          "profession": "Development"
+        },
+        "graphic-designer": {
+          "name": "Graphic Designer", 
+          "path": "templates/graphic-designer",
+          "description": "Design workflow with Photoshop, Illustrator, and InDesign",
+          "profession": "Design"
+        },
+        "video-editor": {
+          "name": "Video Editor",
+          "path": "templates/video-editor", 
+          "description": "Video editing with Premiere, DaVinci, footage, and exports",
+          "profession": "Video"
+        },
+        "photographer": {
+          "name": "Photographer",
+          "path": "templates/photographer",
+          "description": "Photography workflow with RAW files, Lightroom, and delivery",
+          "profession": "Photography"
+        }
+      },
+      applications: {},
+      folderStructure: {
+        "01. AEP": { enabled: true, description: "After Effects projects" },
+        "02. prePro": { enabled: true, description: "Premiere Pro projects" },
+        "03. Renders": { enabled: true, description: "Rendered output files" },
+        "04. Planning": { enabled: true, description: "Project planning and references" },
+        "05. Assets": { enabled: true, description: "Source materials and assets" },
+        "06. Audio": { enabled: true, description: "Audio files and music" },
+        "07. Graphics": { enabled: true, description: "Graphics and illustrations" },
+        "08. Archive": { enabled: false, description: "Archived versions" }
+      }
+    };
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    return { template: { name: "default", path: "templates/default", folders: ["AEP", "prePro"], placeholderName: "Temp" } };
+  }
+}
+
+/**
+ * Recursively copy template folder and rename files/content
+ */
+async function copyTemplateWithRename(sourcePath, destPath, placeholder, projectName) {
+  const items = fs.readdirSync(sourcePath);
+  
+  for (const item of items) {
+    const sourceItemPath = path.join(sourcePath, item);
+    const stat = fs.statSync(sourceItemPath);
+    
+    // Replace placeholder in file/folder names
+    const newItemName = item.replace(new RegExp(placeholder, 'g'), projectName);
+    const destItemPath = path.join(destPath, newItemName);
+    
+    if (stat.isDirectory()) {
+      // Create directory and recurse
+      if (!fs.existsSync(destItemPath)) {
+        fs.mkdirSync(destItemPath, { recursive: true });
+      }
+      await copyTemplateWithRename(sourceItemPath, destItemPath, placeholder, projectName);
+    } else {
+      // Copy file and replace content
+      let content = fs.readFileSync(sourceItemPath, 'utf8');
+      
+      // Replace placeholder in content
+      content = content.replace(new RegExp(placeholder, 'g'), projectName);
+      content = content.replace(/\[DATE\]/g, new Date().toLocaleDateString());
+      
+      fs.writeFileSync(destItemPath, content);
+    }
+  }
+}
+
+ipcMain.handle('select-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  });
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('select-save-location', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select location to create project folder'
+  });
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('select-template-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select custom template folder'
+  });
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('load-settings', async () => {
+  return await loadSettings();
+});
+
+ipcMain.handle('save-settings', async (event, settings) => {
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('select-application', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'After Effects Projects', extensions: ['aep'] },
+      { name: 'Premiere Pro Projects', extensions: ['prproj'] },
+      { name: 'All Project Files', extensions: ['aep', 'prproj'] }
+    ]
+  });
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('open-folder', async (event, folderPath) => {
+  try {
+    await shell.openPath(folderPath);
+    return true;
+  } catch (error) {
+    console.error('Error opening folder:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('check-folder-exists', async (event, folderPath) => {
+  try {
+    return fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory();
+  } catch (error) {
+    return false;
+  }
+});
+
+/**
+ * IPC handler to launch project files using platform-specific methods
+ * Handles Windows, macOS, and Linux file launching with fallbacks
+ * @param {string} projectPath - Full path to the project file to launch
+ * @returns {Object} Result object with success status and error message if failed
+ */
+ipcMain.handle('launch-application', async (event, projectPath) => {
+  try {
+    console.log('Attempting to launch:', projectPath);
+    
+    // First check if the file exists
+    if (!fs.existsSync(projectPath)) {
+      console.error('File does not exist:', projectPath);
+      return { success: false, error: `File not found: ${projectPath}` };
+    }
+
+    console.log('File exists, attempting to launch...');
+
+    // Try platform-specific methods
+    try {
+      // Method 1: Use shell.openPath (most compatible across platforms)
+      await shell.openPath(projectPath);
+      console.log('Successfully launched with shell.openPath');
+      return { success: true };
+    } catch (shellError) {
+      console.error('shell.openPath failed, trying platform-specific methods:', shellError);
+      
+      // Platform-specific fallback methods
+      if (isWindows) {
+        return await launchOnWindows(projectPath);
+      } else if (isMac) {
+        return await launchOnMac(projectPath);
+      } else if (isLinux) {
+        return await launchOnLinux(projectPath);
+      } else {
+        return { success: false, error: 'Unsupported platform' };
+      }
+    }
+  } catch (error) {
+    console.error('Error opening project file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Windows-specific file launching
+ */
+async function launchOnWindows(projectPath) {
+  return new Promise((resolve) => {
+    // Method 2: Use Windows start command
+    const child = spawn('cmd', ['/c', 'start', '""', `"${projectPath}"`], {
+      detached: true,
+      stdio: 'ignore',
+      shell: true
+    });
+    
+    child.on('error', (error) => {
+      console.error('CMD start method failed:', error);
+      
+      // Method 3: Fallback to explorer
+      const explorerChild = spawn('explorer', [projectPath], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      
+      explorerChild.on('error', (explorerError) => {
+        console.error('Explorer method also failed:', explorerError);
+        resolve({ success: false, error: `Could not open file: ${error.message}` });
+      });
+      
+      explorerChild.on('close', () => {
+        resolve({ success: true });
+      });
+      
+      explorerChild.unref();
+    });
+    
+    child.on('close', (code) => {
+      console.log('CMD process closed with code:', code);
+      resolve({ success: true });
+    });
+    
+    // Give it a moment to start
+    setTimeout(() => {
+      resolve({ success: true });
+    }, 1000);
+    
+    child.unref();
+  });
+}
+
+/**
+ * macOS-specific file launching
+ */
+async function launchOnMac(projectPath) {
+  return new Promise((resolve) => {
+    // Use 'open' command on macOS
+    const child = spawn('open', [projectPath], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    
+    child.on('error', (error) => {
+      console.error('macOS open command failed:', error);
+      resolve({ success: false, error: `Could not open file: ${error.message}` });
+    });
+    
+    child.on('close', (code) => {
+      console.log('macOS open process closed with code:', code);
+      resolve({ success: true });
+    });
+    
+    setTimeout(() => {
+      resolve({ success: true });
+    }, 1000);
+    
+    child.unref();
+  });
+}
+
+/**
+ * Linux-specific file launching
+ */
+async function launchOnLinux(projectPath) {
+  return new Promise((resolve) => {
+    // Try xdg-open first (most common on Linux)
+    const child = spawn('xdg-open', [projectPath], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    
+    child.on('error', (error) => {
+      console.error('xdg-open failed, trying alternatives:', error);
+      
+      // Fallback to gnome-open or kde-open
+      const fallbackCommands = ['gnome-open', 'kde-open', 'gio open'];
+      let fallbackIndex = 0;
+      
+      const tryFallback = () => {
+        if (fallbackIndex >= fallbackCommands.length) {
+          resolve({ success: false, error: 'No suitable file opener found on Linux' });
+          return;
+        }
+        
+        const [command, ...args] = fallbackCommands[fallbackIndex].split(' ');
+        const fallbackChild = spawn(command, [...args, projectPath], {
+          detached: true,
+          stdio: 'ignore'
+        });
+        
+        fallbackChild.on('error', () => {
+          fallbackIndex++;
+          tryFallback();
+        });
+        
+        fallbackChild.on('close', () => {
+          resolve({ success: true });
+        });
+        
+        fallbackChild.unref();
+      };
+      
+      tryFallback();
+    });
+    
+    child.on('close', (code) => {
+      console.log('Linux xdg-open process closed with code:', code);
+      resolve({ success: true });
+    });
+    
+    setTimeout(() => {
+      resolve({ success: true });
+    }, 1000);
+    
+    child.unref();
+  });
+}
