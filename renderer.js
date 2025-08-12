@@ -80,6 +80,9 @@ function setupEventListeners() {
     // Create folder structure functionality
     document.getElementById('createFolderStructure').addEventListener('click', createFolderStructure);
     
+    // Scan all projects functionality
+    document.getElementById('scanAllProjectsBtn').addEventListener('click', scanAllProjects);
+    
     // Settings functionality
     document.getElementById('settingsBtn').addEventListener('click', showSettingsPanel);
     
