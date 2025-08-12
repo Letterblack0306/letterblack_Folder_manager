@@ -1,0 +1,58 @@
+name: Ultra Simple Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    - name: Debug project structure
+      run: |
+        echo "=== Current directory ==="
+        pwd
+        ls -la
+        echo "=== Package.json exists? ==="
+        test -f package.json && echo "YES" || echo "NO"
+        echo "=== Main.js exists? ==="
+        test -f main.js && echo "YES" || echo "NO"
+        echo "=== Node version ==="
+        node --version
+        npm --version
+    - name: Install dependencies with verbose output
+      run: npm install --verbose
+    - name: Check if electron is installed
+      run: |
+        echo "=== Checking electron ==="
+        npx electron --version || echo "Electron not found"
+        echo "=== Checking electron-builder ==="
+        npx electron-builder --version || echo "Electron-builder not found"
+
+  simple-windows:
+    runs-on: windows-latest
+    needs: debug
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    - run: npm install
+    - name: Try basic electron-builder command
+      run: |
+        echo "Building for Windows..."
+        npx electron-builder --win --x64 --publish never
+    - name: Check what was built
+      run: |
+        echo "Contents of dist folder:"
+        dir dist
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-debug
+        path: dist/
+        if-no-files-found: warn
