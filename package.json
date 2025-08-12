@@ -1,12 +1,14 @@
 {
   "name": "folder-manager",
   "version": "1.0.0",
-  "description": "Quick Folder Launcher for macOS",
+  "description": "Quick Folder Launcher for Windows and macOS",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --mac dmg --publish=never",
-    "build:mac": "electron-builder --mac dmg --publish=never"
+    "build": "electron-builder --publish=never",
+    "build:mac": "electron-builder --mac dmg --publish=never",
+    "build:win": "electron-builder --win nsis --publish=never",
+    "build:all": "electron-builder --mac dmg --win nsis --publish=never"
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -33,6 +35,21 @@
         "arch": ["x64", "arm64"]
       },
       "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      "publisherName": "LetterBlack",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Folder Manager"
     },
     "dmg": {
       "title": "Folder Manager",
